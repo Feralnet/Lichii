@@ -1059,8 +1059,23 @@ bool KeplerCompute::TryFireEmblemUpscale(bool allow_history) {
         result.addr_lower = static_cast<u32>(tic.Address());
         return result;
     };
-    const auto input_format = dlss_chain.spatial_only ? Tegra::RenderTargetFormat::A8B8G8R8_SRGB
-                                                     : Tegra::RenderTargetFormat::B10G11R11_FLOAT;
+    // The frame arriving here is sRGB-encoded. Declaring it B10G11R11_FLOAT (a LINEAR format)
+    // means the sampler does not linearise on read, the frame stays gamma-encoded, and the
+    // later pass encodes it a SECOND time: the outdoors come out white-hazed with no shadow
+    // anchor. This is upstream #284's bug class ("the copy wrote the sRGB input as-is, so the
+    // later passes encoded it a second time ... pale sky, a white haze, flat colors") and the
+    // same gate that #284 added to the older stand-in never made it into this temporal one.
+    // EDEN_NX2_UPSCALE_INPUT_SRGB=1 forces the decode so the A/B costs one env var.
+    static const bool force_srgb_input = std::getenv("EDEN_NX2_UPSCALE_INPUT_SRGB") != nullptr;
+    static std::array<bool, 2> logged_input_format{};
+    if (force_srgb_input && !logged_input_format[game_index]) {
+        logged_input_format[game_index] = true;
+        LOG_INFO(HW_GPU, "{} upscale input forced to A8B8G8R8_SRGB (sRGB decode on read)",
+                 game);
+    }
+    const auto input_format = (dlss_chain.spatial_only || force_srgb_input)
+                                  ? Tegra::RenderTargetFormat::A8B8G8R8_SRGB
+                                  : Tegra::RenderTargetFormat::B10G11R11_FLOAT;
     const auto output_format = dlss_chain.spatial_only ? Tegra::RenderTargetFormat::R16G16B16A16_FLOAT
                                                       : Tegra::RenderTargetFormat::B10G11R11_FLOAT;
     const bool done = rasterizer->AccelerateTemporalUpscale(
