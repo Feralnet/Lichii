@@ -441,34 +441,15 @@ bool GraphicsPipeline::ConfigureImpl(bool is_indexed) {
         const auto read_handle{[&](const auto& desc, u32 index) {
             if (desc.handle_program != ~0U) {
                 // Read by the shader from a storage buffer: computed for this draw.
-                const auto evaluate{[&](u64 storage_alignment) {
-                    return VideoCommon::EvaluateTextureHandle(
-                        info, desc.handle_program, *gpu_memory,
-                        [&](u32 cbuf) -> GPUVAddr {
-                            return cbuf < cbufs.size() && cbufs[cbuf].enabled ? cbufs[cbuf].address
-                                                                              : GPUVAddr{};
-                        },
-                        storage_alignment);
-                }};
-                // The program's storage offsets are relative to the buffer address aligned down
-                // to the host storage alignment (StorageOffset). EDEN_NX2_HANDLE_ALIGN=1 reads
-                // the words there instead of at the unaligned address.
-                static const bool align_storage{std::getenv("EDEN_NX2_HANDLE_ALIGN") != nullptr};
-                const u64 storage_alignment{device.GetStorageBufferAlignment()};
-                const u32 raw{evaluate(align_storage ? storage_alignment : 1)};
-                if (raw == 0) {
-                    ++zero_texture_handles;
-                    static std::set<std::pair<u64, u32>> logged;
-                    const std::pair key_program{key.unique_hashes[stage + 1], desc.handle_program};
-                    if (logged.size() < 64 && logged.insert(key_program).second) {
-                        LOG_INFO(Render_Vulkan,
-                                 "Texture handle program {} of stage {} (shader {:016x}) gave 0; "
-                                 "aligned to {} it gives {:#x}, unaligned {:#x}",
-                                 desc.handle_program, stage, key_program.first, storage_alignment,
-                                 evaluate(storage_alignment), evaluate(1));
-                    }
-                }
-                return TexturePair(raw, via_header_index);
+                return TexturePair(VideoCommon::EvaluateTextureHandle(
+                                       info, desc.handle_program, *gpu_memory,
+                                       [&](u32 cbuf) -> GPUVAddr {
+                                           return cbuf < cbufs.size() && cbufs[cbuf].enabled
+                                                      ? cbufs[cbuf].address
+                                                      : GPUVAddr{};
+                                       },
+                                       device.GetStorageBufferAlignment()),
+                                   via_header_index);
             }
             ASSERT(cbufs[desc.cbuf_index].enabled);
             const u32 index_offset{index << desc.size_shift};

@@ -374,7 +374,7 @@ bool ComputePipeline::Configure(Tegra::Engines::KeplerCompute& kepler_compute,
                                                   ? cbufs[cbuf].Address()
                                                   : GPUVAddr{};
                                    },
-                                   align_storage ? device.GetStorageBufferAlignment() : 1),
+                                   device.GetStorageBufferAlignment()),
                                via_header_index);
         }
         ASSERT(((qmd.const_buffer_enable_mask >> desc.cbuf_index) & 1) != 0);
