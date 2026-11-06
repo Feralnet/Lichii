@@ -909,7 +909,7 @@ struct Values {
     Setting<bool> disable_macro_hle{linkage, false, "disable_macro_hle",
                                     Category::DebuggingGraphics};
     Setting<bool> extended_logging{
-                                   linkage, false, "extended_logging", Category::Debugging, Specialization::Default, false};
+                                   linkage, false, "extended_logging", Category::Debugging, Specialization::Default, true};
     Setting<bool> use_debug_asserts{linkage, false, "use_debug_asserts", Category::Debugging};
     Setting<bool> use_auto_stub{
                                 linkage, false, "use_auto_stub", Category::Debugging};
