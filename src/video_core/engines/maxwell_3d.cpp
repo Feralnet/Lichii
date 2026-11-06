@@ -1591,6 +1591,17 @@ void Maxwell3D::FrontDmaRead(VideoCommon::GpuSplit& split, FrontState& fs, u32 m
         memory_manager.ReadBlockUnsafe(source, diag_before.data(), read_bytes);
     }
     VideoCommon::Nx2Profile::CountDmaRead(macro);
+    // Front-side macro DMA read (EDEN_NX2_DMA_READ_QUEUED): when every page it covers is free of
+    // GPU shader and copy writes, and the queued writes the front knows do not overlap it, answer
+    // from guest memory with the front's overlay instead of draining the back. OoT makes ~30k of
+    // these a second, nearly all macro 0xe2c reading occlusion results.
+    static const bool read_queued =
+        std::getenv("EDEN_NX2_DMA_READ_QUEUED") == nullptr ||
+        std::getenv("EDEN_NX2_DMA_READ_QUEUED")[0] != '0';
+    if (diag_before.empty() && read_queued &&
+        FrontDmaReadQueued(split, fs, macro, method, source, words)) {
+        return;
+    }
     // EXPERIMENT (not for nx2): EDEN_NX2_DMA_NO_DRAIN=1 reads guest memory as it is, without
     // waiting for the back: how much the drain costs, not a correct read.
     static const bool no_drain = std::getenv("EDEN_NX2_DMA_NO_DRAIN") != nullptr;
