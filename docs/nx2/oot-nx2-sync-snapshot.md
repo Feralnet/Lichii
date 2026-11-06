@@ -44,6 +44,10 @@ The four `EDEN_NX2_*` switches above were measured together at **+8.9 %**
 armed and the heavy tracers off. Measure them in your own scenes before trusting
 the number — scene-to-scene totals are not comparable.
 
+A ready-to-edit launcher implementing the table above lives at
+[`docs/nx2/oot-launcher-example.sh`](oot-launcher-example.sh) — edit the four paths at the top
+and run it.
+
 A pile of further `EDEN_NX2_*` diagnostics exists for debugging draws, queries,
 DMA reads, table pointers and native pipelines; see `docs/nx2/`.
 
