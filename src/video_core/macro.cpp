@@ -1436,18 +1436,33 @@ void MacroEngine::Execute(Core::System& system, Engines::Maxwell3D& maxwell3d, u
                     }
                     // Accurate GPU mode holds report and semaphore writes in the query cache until a
                     // fence: write them out, or occlusion predicates read stale values.
-                    const bool owns_caches = !VideoCommon::GpuSplit::Get().Active() ||
-                                             VideoCommon::GpuSplit::OnBackThread();
-                    if (owns_caches && VideoCommon::QueryDma::TraceEnabled() &&
-                        VideoCommon::QueryDma::HasPendingQueries(memory, maxwell3d.Rasterizer(),
-                                                                 source, read_bytes)) {
-                        VideoCommon::QueryDma::Trace(memory, maxwell3d.Rasterizer(), method, address,
-                                                     source, read_bytes);
+                    //
+                    // The query cache belongs to the back thread and this macro DMA read runs on the
+                    // front, so hand the work to the split instead of testing ownership here. The
+                    // front never owns the caches, so that test skipped the flush on exactly the path
+                    // that needed it and the read kept a stale occlusion count; the guest then culled
+                    // vegetation it should have drawn. GpuSplit::Run runs inline when the split is off
+                    // or we are already on the back, so this is right in every configuration, and
+                    // maxwell_3d.cpp's DMA read already does it this way.
+                    auto& query_split = VideoCommon::GpuSplit::Get();
+                    auto& query_rasterizer = maxwell3d.Rasterizer();
+                    if (VideoCommon::QueryDma::TraceEnabled()) {
+                        query_split.Run(
+                            [&memory, &query_rasterizer, source, read_bytes, method, address] {
+                                if (VideoCommon::QueryDma::HasPendingQueries(memory, query_rasterizer,
+                                                                             source, read_bytes)) {
+                                    VideoCommon::QueryDma::Trace(memory, query_rasterizer, method,
+                                                                 address, source, read_bytes);
+                                }
+                            },
+                            VideoCommon::DrainSite::MacroDmaFlush);
                     }
-                    if (owns_caches) {
-                        VideoCommon::QueryDma::FlushPending(memory, maxwell3d.Rasterizer(), source,
-                                                            read_bytes);
-                    }
+                    query_split.Run(
+                        [&memory, &query_rasterizer, source, read_bytes] {
+                            VideoCommon::QueryDma::FlushPending(memory, query_rasterizer, source,
+                                                                read_bytes);
+                        },
+                        VideoCommon::DrainSite::MacroDmaFlush);
                     if (memory.IsMemoryDirty(source, read_bytes, VideoCommon::CacheType::BufferCache)) {
                         memory.FlushRegion(source, read_bytes, VideoCommon::CacheType::BufferCache);
                         static u64 flushes{};
