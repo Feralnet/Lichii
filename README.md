@@ -16,6 +16,13 @@ Lichii is an experimental, open-source Nintendo Switch and Switch 2 emulator wri
 
 This is an independent fork, not an official release of those upstream projects. Lichii is not affiliated with Nintendo.
 
+> **Ocarina of Time (Switch 2) testers:** this fork carries a community snapshot branch,
+> `feral/oot-nx2-sync`, with the OoT rendering and performance work plus the diagnostics we
+> used to find them. Read the known-issue note before reporting anything —
+> **saves written by older emulator builds carry bad rendering state, so if the vegetation
+> is missing, start a new file.** Details and build steps:
+> [docs/nx2/oot-nx2-sync-snapshot.md](docs/nx2/oot-nx2-sync-snapshot.md).
+
 ## Downloads and setup
 
 Published builds belong on this fork's [releases page](https://github.com/zortos293/Eglantine/releases). The repository still uses its historical Eglantine name; the desktop application is now Lichii.
