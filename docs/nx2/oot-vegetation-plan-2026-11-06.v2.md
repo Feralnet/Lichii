@@ -178,6 +178,20 @@ Traps to handle explicitly:
 4. **A/B arms** — only now, one ordering switch at a time.
 5. Fix, or write the mechanism up with the log line or memory read that proves it.
 
+### Who does what, once there is a fix to make
+
+- **Code changes are written by Claude Code**, not hand-edited by the coordinator:
+  `~/.local/bin/claude-delegate -C /run/media/feral/Games/eglantine-fog-src -n <turns> -- "<task>"`
+  (print mode; it drives the real CLI, which keeps the Max subscription the client of record).
+  Verified working on this box 2026-11-06: v2.1.318, signed in, `tmux` present for interactive work
+  if a multi-turn session is ever needed.
+- **The task card for it states**: the exact file and function, the evidence that justifies the change,
+  the acceptance criterion it must satisfy, and that it may not touch anything else. A coding agent
+  left to roam will refactor past the bug.
+- **Verification stays here**: rebuild, run the suite, and re-run the acceptance criterion on the
+  resulting binary. Claude's "done" is a claim, not a result.
+- **Review stays with Cade** (code review is his lane), before anything is called fixed.
+
 ## State and rollback
 
 `~/.local/bin/oot-state` — `list`, `current`, `save <name>`, `use <tag>` (checks out and rebuilds).
