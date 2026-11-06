@@ -247,6 +247,22 @@ void QueryCacheBase<Traits>::CounterReport(GPUVAddr addr, QueryType counter_type
                  static_cast<u32>(counter_type), static_cast<u32>(flags), payload, gpu_memory->GetID(),
                  gpu_memory->GpuToCpuAddress(addr).value_or(0));
     }
+    // Diagnostic: EDEN_NX2_FORCE_ZPASS=<n> answers every ZPass sample query with the
+    // constant n (default 0x10000) instead of the GPU's count, i.e. "everything is
+    // visible". If occlusion-culled geometry reappears with it, the culling decision
+    // is being fed by the sample counts this cache returns.
+    if (static const u32 force_zpass = [] {
+            const char* value = std::getenv("EDEN_NX2_FORCE_ZPASS");
+            if (value == nullptr) {
+                return 0U;
+            }
+            const u32 parsed = static_cast<u32>(std::strtoul(value, nullptr, 0));
+            return parsed > 1 ? parsed : 0x10000U;
+        }();
+        force_zpass != 0 && counter_type == QueryType::ZPassPixelCount64) {
+        counter_type = QueryType::Payload;
+        payload = force_zpass;
+    }
     size_t streamer_id = static_cast<size_t>(counter_type);
     auto* streamer = impl->streamers[streamer_id];
     if (streamer == nullptr) [[unlikely]] {
