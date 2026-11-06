@@ -1430,7 +1430,7 @@ void Maxwell3D::FrontNoteMemoryWrite(VideoCommon::GpuSplit& split, FrontState& f
         if (!device) {
             return; // CounterReport writes nothing at an unmapped address.
         }
-        // A short payload release is a fence: written when the back runs it (fast fences).
+        // A short payload release is a fence: its payload is known.
         if (query_regs.query.operation == Regs::ReportSemaphore::Operation::Release &&
             query_regs.query.short_query != 0 &&
             query_regs.query.report == Regs::ReportSemaphore::Report::Payload) {
@@ -1493,6 +1493,75 @@ void Maxwell3D::FrontNoteMemoryWrite(VideoCommon::GpuSplit& split, FrontState& f
         split.NoteMemoryWrite(fs.upload_device + fs.upload_offset + whole * 4, remaining_bytes % 4);
     }
     fs.upload_offset += (std::min<u32>)(count * 4, remaining_bytes);
+}
+
+bool Maxwell3D::FrontDmaReadQueued(VideoCommon::GpuSplit& split, FrontState& fs, u32 macro,
+                                   u32 method, GPUVAddr source, u32 words) {
+    // Without draining the back: the words in guest memory, with the queued writes the front
+    // knows the words of on top (inline uploads, fence releases), once the back ran the queued
+    // writes it doesn't know that overlap the read. Pages GPU shaders or copies wrote, and
+    // counter reports whose host query hasn't completed, take the drained path.
+    const size_t read_bytes = size_t{words} * sizeof(u32);
+    for (GPUVAddr page = source & ~GPUVAddr{0xfff}; page < source + read_bytes; page += 0x1000) {
+        const auto device = memory_manager.GpuToCpuAddress(page);
+        if (!device || Tegra::Nx2IsGpuWritten(*device)) {
+            return false;
+        }
+    }
+    const auto device = memory_manager.GpuToCpuAddress(source);
+    if (const u64 async_position = split.HasAsyncWrite(*device, read_bytes);
+        async_position != 0 && (async_position > split.ConsumedNow() ||
+                                !Tegra::Nx2AsyncReportsSettled(*device, read_bytes))) {
+        return false;
+    }
+    thread_local std::vector<u32> fast;
+    fast.resize(words);
+    const u64 since = split.ConsumedNow();
+    memory_manager.ReadBlockUnsafe(source, fast.data(), read_bytes);
+    if (!split.OverlayQueuedWrites(since, *device, fast.data(), words)) {
+        if (!split.WaitForWritesTo(*device, read_bytes)) {
+            return false;
+        }
+        memory_manager.ReadBlockUnsafe(source, fast.data(), read_bytes);
+    }
+    // EDEN_NX2_DMA_READ_CHECK=1: also drain, read again and log reads that differ.
+    static const bool check = std::getenv("EDEN_NX2_DMA_READ_CHECK") != nullptr;
+    if (check) [[unlikely]] {
+        static u64 checks{};
+        static u64 differences{};
+        split.Drain(VideoCommon::DrainSite::MacroDmaRead);
+        if (memory_manager.IsMemoryDirty(source, read_bytes, VideoCommon::CacheType::BufferCache)) {
+            split.Run(
+                [memory = &memory_manager, source, read_bytes] {
+                    memory->FlushRegion(source, read_bytes, VideoCommon::CacheType::BufferCache);
+                },
+                VideoCommon::DrainSite::MacroDmaFlush);
+        }
+        std::vector<u32> exact(words);
+        memory_manager.ReadBlockUnsafe(source, exact.data(), read_bytes);
+        ++checks;
+        if (exact != fast) {
+            if (differences++ < 16) {
+                LOG_WARNING(HW_GPU,
+                            "DMA read check: macro {:#x} read of {} words at {:#x} differs from "
+                            "the drained read",
+                            macro, words, source);
+            }
+            fast = std::move(exact);
+        }
+        if ((checks & 0xffff) == 0) {
+            LOG_INFO(HW_GPU, "DMA read check: {} reads, {} differed", checks, differences);
+        }
+    }
+    const u32 ram = fs.regs[0x156];
+    for (u32 i = 0; i < words; ++i) {
+        if (method == 0x158) {
+            fs.parameters.push_back(fast[i]);
+        } else if (ram + i < native_data_ram.size()) {
+            native_data_ram[ram + i] = fast[i];
+        }
+    }
+    return true;
 }
 
 void Maxwell3D::FrontDmaRead(VideoCommon::GpuSplit& split, FrontState& fs, u32 macro,

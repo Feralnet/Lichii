@@ -411,12 +411,11 @@ void Puller::ProcessSemaphoreExecute(DmaPusher& dma_pusher, u32 argument) {
 }
 
 // A semaphore release queued for the split's back: the front's macro DMA reads of those bytes
-// wait for it (EDEN_NX2_DMA_WAIT_WRITERS).
-// A fence release (`fence_payload`) is written when the back runs it, so reads overlay it.
+// wait for it (Maxwell3D::FrontDmaRead).
+// A fence release (`fence_payload`): reads overlay its payload while it is queued.
 static void NoteSemaphoreWrite(DmaPusher& dma_pusher, GPUVAddr address,
                                std::optional<u32> fence_payload) {
     auto& split = VideoCommon::GpuSplit::Get();
-    split.NoteMemoryWriter();
     const auto device = dma_pusher.memory_manager.GpuToCpuAddress(address);
     if (!device) {
         return; // Queries write nothing at an unmapped address.

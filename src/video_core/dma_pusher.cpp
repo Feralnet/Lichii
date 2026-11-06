@@ -478,14 +478,16 @@ void DmaPusher::CallMethod(u32 argument) {
         // feeds a separate memory-writer hook. Neither is a superset: keep both.
         const bool writer = split.Active() &&
                             IsMemoryWriter(*subchannel, engine_type, dma_state.method);
-        const bool memory_writer =
-            split.Active() && (engine_type == Engines::EngineTypes::KeplerMemory ||
-                               engine_type == Engines::EngineTypes::Fermi2D);
+        // 2D blits and I2M uploads write guest memory at addresses the front doesn't track: macro
+        // DMA reads wait for them (Maxwell3D::FrontDmaRead).
+        const bool other_writer = split.Active() &&
+                                  (engine_type == Engines::EngineTypes::KeplerMemory ||
+                                   engine_type == Engines::EngineTypes::Fermi2D);
         SCOPE_EXIT {
             if (writer) {
                 split.NoteWriter();
-            } else if (memory_writer) {
-                split.NoteMemoryWriter();
+            } else if (other_writer) {
+                split.NoteMemoryWrite(0, ~u64{0}, "2D or I2M");
             }
         };
         if (split.Active()) {
@@ -546,14 +548,16 @@ void DmaPusher::CallMultiMethod(const u32* base_start, u32 num_methods) {
         // feeds a separate memory-writer hook. Neither is a superset: keep both.
         const bool writer = split.Active() &&
                             IsMemoryWriter(*subchannel, engine_type, dma_state.method);
-        const bool memory_writer =
-            split.Active() && (engine_type == Engines::EngineTypes::KeplerMemory ||
-                               engine_type == Engines::EngineTypes::Fermi2D);
+        // 2D blits and I2M uploads write guest memory at addresses the front doesn't track: macro
+        // DMA reads wait for them (Maxwell3D::FrontDmaRead).
+        const bool other_writer = split.Active() &&
+                                  (engine_type == Engines::EngineTypes::KeplerMemory ||
+                                   engine_type == Engines::EngineTypes::Fermi2D);
         SCOPE_EXIT {
             if (writer) {
                 split.NoteWriter();
-            } else if (memory_writer) {
-                split.NoteMemoryWriter();
+            } else if (other_writer) {
+                split.NoteMemoryWrite(0, ~u64{0}, "2D or I2M");
             }
         };
         if (split.Active()) {
