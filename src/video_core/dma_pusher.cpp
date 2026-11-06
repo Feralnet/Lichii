@@ -471,11 +471,21 @@ void DmaPusher::CallMethod(u32 argument) {
             return;
         }
         const auto engine_type = subchannel_type[dma_state.subchannel];
+        // Two tests, deliberately combined. Ours decides per METHOD whether this call actually
+        // writes memory (KeplerCompute's MayWriteMemory, MaxwellDMA's macro/execution mask), which
+        // is finer than an engine-type check. Theirs (a281376cc8) covers engines ours ignored
+        // entirely - KeplerMemory and Fermi2D write guest memory rather than command lists - and
+        // feeds a separate memory-writer hook. Neither is a superset: keep both.
         const bool writer = split.Active() &&
                             IsMemoryWriter(*subchannel, engine_type, dma_state.method);
+        const bool memory_writer =
+            split.Active() && (engine_type == Engines::EngineTypes::KeplerMemory ||
+                               engine_type == Engines::EngineTypes::Fermi2D);
         SCOPE_EXIT {
             if (writer) {
                 split.NoteWriter();
+            } else if (memory_writer) {
+                split.NoteMemoryWriter();
             }
         };
         if (split.Active()) {
@@ -529,11 +539,21 @@ void DmaPusher::CallMultiMethod(const u32* base_start, u32 num_methods) {
             return;
         }
         const auto engine_type = subchannel_type[dma_state.subchannel];
+        // Two tests, deliberately combined. Ours decides per METHOD whether this call actually
+        // writes memory (KeplerCompute's MayWriteMemory, MaxwellDMA's macro/execution mask), which
+        // is finer than an engine-type check. Theirs (a281376cc8) covers engines ours ignored
+        // entirely - KeplerMemory and Fermi2D write guest memory rather than command lists - and
+        // feeds a separate memory-writer hook. Neither is a superset: keep both.
         const bool writer = split.Active() &&
                             IsMemoryWriter(*subchannel, engine_type, dma_state.method);
+        const bool memory_writer =
+            split.Active() && (engine_type == Engines::EngineTypes::KeplerMemory ||
+                               engine_type == Engines::EngineTypes::Fermi2D);
         SCOPE_EXIT {
             if (writer) {
                 split.NoteWriter();
+            } else if (memory_writer) {
+                split.NoteMemoryWriter();
             }
         };
         if (split.Active()) {
